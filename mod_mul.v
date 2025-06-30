@@ -1,8 +1,6 @@
 // ============================================================================
-// FIXED ECC SCALAR MULTIPLICATION SYSTEM FOR SECP256K1
+// Fixed mod_mul.v - Corrected modular multiplication with proper reduction
 // ============================================================================
-
-// Fixed mod_mul.v - Proper serialized modular multiplication
 module mod_mul (
     input  wire        clk,
     input  wire        rst,
@@ -12,7 +10,7 @@ module mod_mul (
     output reg  [255:0] result,
     output reg         done
 );
-    localparam P = 256'hFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F;
+    localparam [255:0] P = 256'hFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F;
 
     reg [511:0] product;
     reg [255:0] a_reg, b_reg;
@@ -48,10 +46,10 @@ module mod_mul (
                     end
                 end
                 
-                2: begin // Modular reduction
-                    if (product >= {256'b0, P})
+                2: begin // Iterative modular reduction
+                    if (product >= {256'b0, P}) begin
                         product <= product - {256'b0, P};
-                    else begin
+                    end else begin
                         result <= product[255:0];
                         done <= 1;
                         state <= 0;
