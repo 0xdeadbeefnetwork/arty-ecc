@@ -1,5 +1,6 @@
 // ============================================================================
-// Fixed top.v - Corrected UART and control logic
+// Fixed top.v - Bitcoin Puzzle #72 Key Generator (2^71 to 2^72-1)
+// Generates private keys in range and outputs PrivateKey:PublicKeyX via UART
 // ============================================================================
 module top (
     input wire CLK12MHZ,
@@ -21,7 +22,11 @@ module top (
     localparam [255:0] PUZZLE_BASE = 256'h0000000000000000000000000000000000000000000080000000000000000000; // 2^71
     localparam [71:0] MAX_ENTROPY = 72'hFFFFFFFFFFFFFFFFFF; // 2^72 - 1
     
-    reg [71:0] entropy_counter = 72'h0; // 72-bit counter for the entropy portion
+    // Starting offset - modify this to start from a specific point in the range
+    // Example: 72'h123456789ABCDEF0 to start from a specific offset
+    localparam [71:0] START_OFFSET = 72'h0; // Start from beginning of range
+    
+    reg [71:0] entropy_counter = START_OFFSET; // 72-bit counter for the entropy portion
     reg [255:0] priv_key;
 
     wire [255:0] pub_x, pub_y;
@@ -40,6 +45,9 @@ module top (
     reg [7:0] char_index = 0;
     reg [1:0] tx_state = 0;
     reg message_ready = 0;
+    
+    // Loop variable declaration (must be at module level)
+    integer i;
 
     // ECC core instance
     ecc_scalar_mul ecc_core (
@@ -51,6 +59,11 @@ module top (
         .pub_y(pub_y),
         .done(ecc_done)
     );
+
+    // Generate private key from entropy counter
+    always @(*) begin
+        priv_key = PUZZLE_BASE | {184'b0, entropy_counter}; // Combine base with entropy
+    end
 
     // Heartbeat LED
     always @(posedge clk_bufg) begin
@@ -69,11 +82,6 @@ module top (
         end
     endfunction
 
-    // Generate private key from entropy counter
-    always @(*) begin
-        priv_key = PUZZLE_BASE | {184'b0, entropy_counter}; // Combine base with entropy
-    end
-
     // Main control logic
     always @(posedge clk_bufg) begin
         if (btn[0]) begin // Reset
@@ -82,7 +90,7 @@ module top (
             tx_active <= 0;
             message_ready <= 0;
             char_index <= 0;
-            entropy_counter <= 72'h0; // Reset to start of range
+            entropy_counter <= START_OFFSET; // Reset to starting offset
         end else begin
             ecc_start_prev <= ecc_start;
             
@@ -98,7 +106,6 @@ module top (
                     ecc_start <= 0;
                     if (ecc_done) begin
                         // Format private key + public key as hex string
-                        integer i;
                         // First 64 chars: private key
                         for (i = 0; i < 64; i = i + 1) begin
                             message[i] <= nibble_to_hex(priv_key[255 - i*4 -: 4]);
@@ -128,7 +135,7 @@ module top (
                         // Message complete, increment entropy and restart
                         message_ready <= 0;
                         if (entropy_counter == MAX_ENTROPY) begin
-                            entropy_counter <= 72'h0; // Wrap around after exhausting range
+                            entropy_counter <= START_OFFSET; // Wrap back to start offset
                         end else begin
                             entropy_counter <= entropy_counter + 1;
                         end
